@@ -1,1 +1,1 @@
-# cv-lung-classification-
+# cv-lung-classification
