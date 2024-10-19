@@ -1,28 +1,53 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+
 import './App.css';
 import AWS from 'aws-sdk';
+import SageMakerRuntime from 'aws-sdk/clients/sagemakerruntime';
+
+const env = {
+  "ACCESS_KEY": "***",
+  "SECRET_KEY": "***",
+  "REGION": "us-east-2"
+};
+// Load environment variables
+const ACCESS_KEY = env.ACCESS_KEY;
+const SECRET_KEY = env.SECRET_KEY;
+const REGION = env.REGION;
+
+if (!ACCESS_KEY || !SECRET_KEY || !REGION) {
+  console.log('env', env)
+  throw new Error('AWS credentials or region are missing from environment variables');
+}
 
 // Configure AWS SDK
-AWS.config.update({
-  accessKeyId: process.env.ACCESS_KEY,
-  secretAccessKey: process.env.SECRET_KEY,
-  region: process.env.REGION
+const awsConfig = new AWS.Config({
+  credentials: new AWS.Credentials({
+    accessKeyId: ACCESS_KEY,
+    secretAccessKey: SECRET_KEY
+  }),
+  region: REGION
 });
+
+// Apply the configuration globally
+AWS.config.update(awsConfig);
 
 // Create S3 service object
 const s3 = new AWS.S3();
 
+// Create SageMaker Runtime client
+const sagemakerruntime = new SageMakerRuntime({
+  apiVersion: '2017-05-13',
+  ...awsConfig
+});
+
 const imageWidth = 2400;
 const imageHeight = 1800;
 
-
-
-
 const images = [
-'/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s2.png',
-'/images/ISH120318_EFNB1_R6069_2_2Months_D092-LUL-9B1_7.5_s1.png',
-'/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s1.png'
-]
+  '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s2.png',
+  '/images/ISH120318_EFNB1_R6069_2_2Months_D092-LUL-9B1_7.5_s1.png',
+  '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s1.png'
+  ]
 
 function App() {
   const [imageUrl, setImageUrl] = useState(images[Math.floor(Math.random() * images.length)]);
@@ -79,7 +104,7 @@ function App() {
     D: 'DUCT'
   }), []);
 
-  const createCroppedImage = useCallback((x, y) => {
+  const getCroppedImage = useCallback((x, y) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const smallCanvas = smallCanvasRef.current;
@@ -141,13 +166,82 @@ function App() {
 
     // Convert greyscale canvas to data URL and set state
     const dataUrl = smallCanvas.toDataURL('image/png');
+    return dataUrl;
+
+  }, [blueMultiple]);
+
+  const createCroppedImage = useCallback((x, y) => {
+    const dataUrl = getCroppedImage(x, y);
 
     setClickData(prevData => [...prevData, { image: dataUrl, class: activeClass }]);
     setLabels(prevLabels => [...prevLabels, { x, y, label: activeClass, color: labelColors[activeClass] }]);
     
 
-  }, [activeClass, blueMultiple, labelColors]);
+  }, [activeClass, getCroppedImage, labelColors]);
 
+
+  const runInference = useCallback(async (x, y) => {
+    const dataUrl = getCroppedImage(x, y);
+
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+
+    // Convert base64 to ArrayBuffer
+    const binaryString = window.atob(base64Data);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    console.log('runInference dataUrl');
+
+    // Function to convert image to proper format
+    async function prepareImageData(imageUrl) {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(new Uint8Array(reader.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(blob);
+      });
+    }
+
+    const imgData = await prepareImageData(dataUrl);
+
+    
+    const params = {
+      Body: imgData,
+      EndpointName: 'lung-1c',
+      ContentType: 'image/png',
+      Accept: '*'
+    };
+
+    const prom = new Promise((resolve, reject) => {
+      sagemakerruntime.invokeEndpoint(params, (err, data) => {
+        if (err) reject(err);
+        else resolve(JSON.parse(new TextDecoder().decode(data.Body)));
+      });
+    });
+
+    let result = await prom;
+    result = [Number(result[0]), Number(result[1]), Number(result[2])] 
+
+    let foundClass;
+    if (result[0] > result[1] && result[0] > result[2]) {
+      foundClass = 'A';
+    } else if (result[1] > result[0] && result[1] > result[2]) {
+      foundClass = 'D';
+    } else if (result[2] > result[0] && result[2] > result[1]) {
+      foundClass = 'S';
+    }
+
+    setLabels(prevLabels => [...prevLabels, { x, y, label: foundClass, color: labelColors[foundClass] }]);
+    
+    console.log('result', result);
+    
+
+  }, [getCroppedImage, labelColors]);
 
   const imagePadding = imageSize * Math.max(redMultiple, greenMultiple, blueMultiple) / 2;
 
@@ -159,7 +253,12 @@ function App() {
       const rect = imageRef.current.getBoundingClientRect();
       //const x = event.clientX - rect.left + cropOffset.x;
       //const y = event.clientY - rect.top + cropOffset.y;
-      createCroppedImage(event.clientX, event.clientY);
+
+      if (activeClass === 'auto') {
+        runInference(event.clientX, event.clientY);
+      } else {
+        createCroppedImage(event.clientX, event.clientY);
+      }
     }
   };
 
@@ -255,9 +354,21 @@ function App() {
       console.log('manifestData', manifestData);
 
       let manifestString = '';
-      manifestData.forEach((entry) => {
+      let lstString = '';
+      let lstCount = 0;
+      manifestData.forEach((entry, i) => {
         manifestString += JSON.stringify(entry) + '\n';
+        let pathAr = entry["source-ref"].split('/');
+        let imgName = pathAr[pathAr.length - 1].replace('.png', '');
+        if (imgName.includes('-')) {
+          let dateStr = imgName.split('-')[0];
+          if (Number(dateStr) > 1729187213055) {
+            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace("s3://newbai-ai-resources/lung/training/","")}\n`;
+            lstCount += 1;
+          }
+        }
       });
+      console.log('lstCount', lstCount);
       const manifestParams = {
         Bucket: 'newbai-ai-resources',
         Key: 'lung/training/training_manifest.json',
@@ -273,6 +384,23 @@ function App() {
         }
       });
 
+      const lstParams = {
+        Bucket: 'newbai-ai-resources',
+        Key: 'lung/training/train_lst/train_lst.lst',
+        Body: lstString,
+        ContentType: 'text/html'
+      };
+
+      s3.upload(lstParams, (err, data) => {
+        if (err) {
+          console.error("Error", err);
+        } else {
+          console.log("Upload Success", data.Location);
+        }
+      });
+
+      console.log('lstString', lstString);
+      
     }, clickData.length * 250 + 1000)
 
     setTimeout(async () => {
@@ -316,8 +444,17 @@ function App() {
       console.log('manifestData', manifestData);
 
       let manifestString = '';
-      manifestData.forEach((entry) => {
+      let lstString = '';
+      manifestData.forEach((entry, i) => {
         manifestString += JSON.stringify(entry) + '\n';
+        let pathAr = entry["source-ref"].split('/');
+        let imgName = pathAr[pathAr.length - 1].replace('.png', '');
+        if (imgName.includes('-')) {
+          let dateStr = imgName.split('-')[0];
+          if (Number(dateStr) > 1729187213055) {
+            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace("s3://newbai-ai-resources/lung/training/","")}\n`;
+          }
+        }
       });
       const manifestParams = {
         Bucket: 'newbai-ai-resources',
@@ -327,6 +464,21 @@ function App() {
       };
 
       s3.upload(manifestParams, (err, data) => {
+        if (err) {
+          console.error("Error", err);
+        } else {
+          console.log("Upload Success", data.Location);
+        }
+      });
+
+      const lstParams = {
+        Bucket: 'newbai-ai-resources',
+        Key: 'lung/training/validation_lst/validation_lst.lst',
+        Body: lstString,
+        ContentType: 'text/html'
+      };
+
+      s3.upload(lstParams, (err, data) => {
         if (err) {
           console.error("Error", err);
         } else {
@@ -432,11 +584,11 @@ function App() {
       )}
       {!croppedImageUrl && (
         <div style={{
-          width: `${imageHeight}px`,
+          width: `${imageWidth}px`,
           flexCollapse: '0',
-          height: `${imageWidth / 2}px`,
+          height: `${imageHeight / 2}px`,
           textAlign: 'center',
-          paddingTop: `${imageWidth / 2}px`
+          paddingTop: `${imageHeight / 2}px`
         }}>loading</div>
       )}
       <div style={{
@@ -455,6 +607,7 @@ function App() {
             <option value="S">Septa</option>
             <option value="A">Alvioli</option>
             <option value="D">Duct</option>
+            <option value="auto">Auto</option>
           </select>
           <button onClick={() => {
             setLabels([])
