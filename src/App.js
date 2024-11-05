@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+//import Tiff from 'tiff.js';
 
 import './App.css';
 import AWS from 'aws-sdk';
 import SageMakerRuntime from 'aws-sdk/clients/sagemakerruntime';
 
 const env = {
-  "ACCESS_KEY": "***",
-  "SECRET_KEY": "***",
-  "REGION": "us-east-2"
+  "ACCESS_KEY": "*",
+  "SECRET_KEY": "*",
+  "REGION": "*"
 };
 // Load environment variables
 const ACCESS_KEY = env.ACCESS_KEY;
@@ -40,69 +41,435 @@ const sagemakerruntime = new SageMakerRuntime({
   ...awsConfig
 });
 
-const imageWidth = 2400;
-const imageHeight = 1800;
-
-const images = [
-  '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s2.png',
-  '/images/ISH120318_EFNB1_R6069_2_2Months_D092-LUL-9B1_7.5_s1.png',
-  '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s1.png'
-  ]
+const projects = {
+  'prostate': {
+    name: 'prostate',
+    endpoint: 'prostate-0b',
+    images: [
+      //'/images/000920ad0b612851f8e01bcc880d9b3d.tiff',
+      //'/images/0018ae58b01bdadc8e347995b69f99aa.tiff',
+      //'/images/001d865e65ef5d2579c190a0e0350d8f.tiff',
+      //'/images/002a4db09dad406c85505a00fb6f6144.tiff',
+      //'/images/0032bfa835ce0f43a92ae0bbab6871cb.tiff',
+      //'/images/003a91841da04a5a31f808fb5c21538a.tiff',
+      //'/images/003d4dd6bd61221ebc0bfb9350db333f.tiff',
+      '/images/007433133235efc27a39f11df6940829.tiff',
+      '/images/008069b542b0439ed69b194674051964.tiff',
+      '/images/0076bcb66e46fb485f5ba432b9a1fe8a.tiff'
+    ],
+    masks: [
+      //'/images/000920ad0b612851f8e01bcc880d9b3d_mask.tiff',
+      //'/images/0018ae58b01bdadc8e347995b69f99aa_mask.tiff',
+      //'/images/001d865e65ef5d2579c190a0e0350d8f_mask.tiff',
+      //'/images/002a4db09dad406c85505a00fb6f6144_mask.tiff',
+      //'/images/0032bfa835ce0f43a92ae0bbab6871cb_mask.tiff',
+      //'/images/003a91841da04a5a31f808fb5c21538a_mask.tiff',
+      //'/images/003d4dd6bd61221ebc0bfb9350db333f_mask.tiff',
+      '/images/007433133235efc27a39f11df6940829_mask.tiff',
+      '/images/008069b542b0439ed69b194674051964_mask.tiff',
+      '/images/0076bcb66e46fb485f5ba432b9a1fe8a_mask.tiff'
+    ],
+    maskColors: {
+      '2': [251, 255, 28, 80],
+      '3': [255,160,25,80],
+      '4': [255,0,0,80]
+    },
+    imageWidth: 1600,
+    imageHeight: 1200,
+    imageSize: 50,
+    redMultiple: 4,
+    greenMultiple: 2,
+    blueMultiple: 1/2,
+    brighten: false,
+    labels: [
+      {
+        name: 'Healthy',
+        abbreviation: '0',
+        classNum: '0',
+        color: '#0f0'
+      },
+      {
+        name: 'Gleason 3',
+        abbreviation: '3',
+        classNum: '1',
+        color: '#fa9b3c'
+      },
+      {
+        name: 'Gleason 4',
+        abbreviation: '4',
+        classNum: '2',
+        color: '#fcff2e'
+      },
+      {
+        name: 'Gleason 5',
+        abbreviation: '5',
+        classNum: '3',
+        color: '#f00'
+      },
+    ]
+  },
+  'lung': {
+    name: 'lung',
+    endpoint: 'lung-1c',
+    images: [
+      '/images/ISH_062118_AGER_R6052_1Days_D109-LUL-5A1_5.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D102-LUL-7A1_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D102-LUL-7A1_1.4_s2.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D102-LUL-9A2_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D102-LUL-9A2_1.4_s2.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-5A1_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-5A1_1.4_s2.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_1Days_D109-LUL-9A1_1.4_s2.png',
+      '/images/ISH061918_EPAS1_R6071_7Days_D142-LUL-9B3_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_7Days_D142-LUL-9B3_1.4_s2.png',
+      '/images/ISH061918_EPAS1_R6071_7Days_D142-LUL-11A1_1.4_s1.png',
+      '/images/ISH061918_EPAS1_R6071_7Days_D142-LUL-11A1_1.4_s2.png',
+      '/images/ISH112718_CCR1_R6059_2_3Years_D149-LUL-9B1_2.5_s1.png',
+      '/images/ISH112718_CCR1_R6059_2_8Years_D036-LUL-11B5_2.5_s2.png',
+      '/images/ISH120318_EFNB1_R6069_2_1Days_D038-LUL-5A1_7.5_s1.png',
+      '/images/ISH120318_EFNB1_R6069_2_1Days_D038-LUL-5A1_7.5_s2.png',
+      '/images/ISH120318_EFNB1_R6069_2_1Days_D038-LUL-7A3_7.5_s1.png',
+      '/images/ISH120318_EFNB1_R6069_2_1Days_D038-LUL-7A3_7.5_s2.png',
+      '/images/ISH120318_EFNB1_R6069_2_2Months_D092-LUL-9B1_7.5_s1.png',
+      '/images/ISH120318_EFNB1_R6069_2_3Years_D046-LUL-13A3_7.5_s1.png',
+      '/images/ISH120318_EFNB1_R6069_2_8Years_D036-LUL-11B5_7.5_s2.png'
+    ],
+    imageWidth: 2400,
+    imageHeight: 1800,
+    imageSize: 50,
+    redMultiple: 24,
+    greenMultiple: 8,
+    blueMultiple: 1,
+    brighten: true,
+    labels: [
+      {
+        name: 'Alveoli',
+        abbreviation: 'A',
+        classNum: '0',
+        color: '#0a0'
+      },
+      {
+        name: 'Duct',
+        abbreviation: 'D',
+        classNum: '1',
+        color: '#00a'
+      },
+      {
+        name: 'Septa',
+        abbreviation: 'S',
+        classNum: '2',
+        color: '#a00'
+      }
+    ]
+  }
+}
 
 function App() {
-  const [imageUrl, setImageUrl] = useState(images[Math.floor(Math.random() * images.length)]);
+  const [activeProject, setActiveProject] = useState('prostate');
   const [croppedImageUrl, setCroppedImageUrl] = useState(null);
   const [clickData, setClickData] = useState([]);
   const [activeClass, setActiveClass] = useState('S');
+  const [maskOn, setMaskOn] = useState(true);
   const [labels, setLabels] = useState([]);
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
+  const maskCanvasRef = useRef(null);
   const smallCanvasRef = useRef(null);
   const imageRef = useRef(null);
 
+  const labelColors = useMemo(() => {
+    let result = {};
+    projects[activeProject].labels.forEach(label => {
+      result[label.abbreviation] = label.color;
+    });
+    return result;
+  }, [activeProject]);
+
+  const classToNumber = useMemo(() => {
+    let result = {};
+    projects[activeProject].labels.forEach(label => {
+      result[label.abbreviation] = label.classNum;
+    });
+    return result;
+  }, [activeProject]);
+
+  const labelNames = useMemo(() => {
+    let result = {};
+    projects[activeProject].labels.forEach(label => {
+      result[label.abbreviation] = label.name;
+    });
+    return result;
+  }, [activeProject]);
+
+  const imageWidth = useMemo(() => {
+    return projects[activeProject].imageWidth;
+  }, [activeProject]);
+
+  const imageHeight = useMemo(() => {
+    return projects[activeProject].imageHeight;
+  }, [activeProject]);
+
+  const imageSize = useMemo(() => {
+    return projects[activeProject].imageSize;
+  }, [activeProject]);
+
+  const redMultiple = useMemo(() => {
+    return projects[activeProject].redMultiple;
+  }, [activeProject]);
+
+  const greenMultiple = useMemo(() => {
+    return projects[activeProject].greenMultiple;
+  }, [activeProject]);
+
+  const blueMultiple = useMemo(() => {
+    return projects[activeProject].blueMultiple;
+  }, [activeProject]);
+
+  const brighten = useMemo(() => {
+    return projects[activeProject].brighten;
+  }, [activeProject]);
+
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
+    setActiveClass(projects[activeProject].labels[0].abbreviation);
+  }, [activeProject, setActiveClass]);
 
-      // Calculate random crop coordinates
-      const maxX = Math.max(0, img.width - imageWidth);
-      const maxY = Math.max(0, img.height - imageHeight);
-      const x = Math.floor(Math.random() * maxX);
-      const y = Math.floor(Math.random() * maxY);
+  const imagePadding = imageSize * Math.max(redMultiple, greenMultiple, blueMultiple) / 2;
+  
+  const grabRandomCrop = useCallback(() => {
+    const imageIndex = Math.floor(Math.random() * projects[activeProject].images.length);
+    const imageUrl = `https://newbai-ai-resources.s3.us-east-2.amazonaws.com` + projects[activeProject].images[imageIndex];
+    const mask = projects[activeProject].masks ? projects[activeProject].masks[imageIndex] : undefined;
+    console.log('processImage', imageUrl);
+    //if (imageUrl.indexOf('.tif') > -1) {
+    //  const dataUrl = await tiffSliceToPng(imageUrl, 0, 0, imageWidth, imageHeight);
+    //  console.log('tiff dataUrl', dataUrl);
+    //}
 
-      setCropOffset({ x, y });
+    const processImage = async () => {
+      if (imageUrl.indexOf('.tiff') > -1) {
 
-      // Set canvas size and draw cropped image
-      canvas.width = imageWidth;
-      canvas.height = imageHeight;
-      ctx.drawImage(img, x, y, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
+        window.Tiff.initialize({TOTAL_MEMORY: 16777216 * 25});
 
-      // Convert canvas to data URL and set state
-      const dataUrl = canvas.toDataURL('image/png');
-      setCroppedImageUrl(dataUrl);
-    };
-    img.src = imageUrl;
-  }, [imageUrl]);
+        const maskCanvas = await new Promise((resolve, reject) => {
+          if (!mask) {
+            resolve(null);
+          } else {
 
-  const imageSize = 50;
-  const redMultiple = 24;
-  const greenMultiple = 8;
-  const blueMultiple = 1;
+            var xhr = new XMLHttpRequest();
+            xhr.responseType = 'arraybuffer';
+            xhr.open('GET', `${mask}`);
+            xhr.onload = function (e) {
+              var tiff = new window.Tiff({buffer: xhr.response});
+              console.log('tiff', tiff);
+              console.log('tiff.width()', tiff.width(), 'tiff.height()', tiff.height());
+              var tempCanvas = tiff.toCanvas();
+              resolve(tempCanvas);
+              
+            };
+            xhr.send();
+          }
+        });
+        
+        var xhr = new XMLHttpRequest();
+        xhr.responseType = 'arraybuffer';
+        xhr.open('GET', `${imageUrl}`);
+        xhr.onload = function (e) {
+          var tiff = new window.Tiff({buffer: xhr.response});
+          console.log('tiff', tiff);
+          console.log('tiff.width()', tiff.width(), 'tiff.height()', tiff.height());
+          var tempCanvas = tiff.toCanvas();
+          const tempCtx = tempCanvas.getContext('2d');
+          //window.document.body.appendChild(tempCanvas);
+          
+          let randomPointCount = 0;
+          let foundPixel = false;
+          let startX;
+          let startY;
 
-  const labelColors = useMemo(() => ({
-    S: '#a00',
-    A: '#0a0',
-    D: '#00a'
-  }), []);
+          while (!foundPixel && randomPointCount < 1000) {
+            randomPointCount += 1;
+            startX = Math.floor(Math.random() * (tiff.width() - imageWidth));
+            startY = Math.floor(Math.random() * (tiff.height() - imageHeight));
 
-  const labelNames = useMemo(() => ({
-    S: 'SEPTA',
-    A: 'ALVIOLI',
-    D: 'DUCT'
-  }), []);
+            let pImageData = tempCtx.getImageData(Math.floor(startX + imageWidth/2), Math.floor(startY + imageHeight/2), 5, 5);
+            let pData = pImageData.data;
+            console.log('pData', pData);
+
+            for (let i = 0; i < pData.length; i += 4) {
+              if (pData[i] < 220 && pData[i + 1] < 220 && pData[i + 2] < 220 && pData[i + 3] > 0) {
+                foundPixel = true;
+              }
+            }
+
+          }
+      
+          console.log('randomPointCount', randomPointCount);
+          console.log('startX', startX, 'startY', startY);
+
+          const canvas = canvasRef.current;
+          canvas.width = imageWidth;
+          canvas.height = imageHeight;
+          const ctx = canvas.getContext('2d');
+
+          ctx.drawImage(
+            tempCanvas, 
+            startX, startY, imageWidth, imageHeight, 
+            0, 0, imageWidth, imageHeight 
+          );
+          if (mask) {
+            const maskColors = projects[activeProject].maskColors;
+            const maskCtx = maskCanvas.getContext('2d');
+            const maskCanvasCtx = maskCanvasRef.current.getContext('2d');
+            maskCanvasRef.current.width = imageWidth;
+            maskCanvasRef.current.height = imageHeight;
+            let maskImageData = maskCtx.getImageData(Math.floor(startX), Math.floor(startY), imageWidth, imageHeight);
+            let maskData = maskImageData.data;
+
+            let cachedMaskData = [...maskImageData.data];
+
+            for (let i = 0; i < maskData.length; i += 4) {
+              let upI = (i / 4 - imageWidth) * 4
+              let downI = (i / 4 + imageWidth) * 4
+              let leftI = i - 4;
+              let rightI = i + 4;
+              if (upI < 0) {
+                upI = i;
+              }
+              if (leftI < 0) {
+                leftI = i;
+              }
+              if (downI >= maskData.length) {
+                downI = i;
+              }
+              if (rightI >= maskData.length) {
+                rightI = i;
+              }
+              const upVal = cachedMaskData[upI];
+              const downVal = cachedMaskData[downI];
+              const leftVal = cachedMaskData[leftI];
+              const rightVal = cachedMaskData[rightI];
+
+              const val = cachedMaskData[i];
+
+              
+              if (val !== upVal || val !== downVal || val !== leftVal || val !== rightVal) {
+                //console.log("FOUND DIFFERENT VALS", val, upVal, downVal, leftVal, rightVal);
+                const maxVal = Math.max(val, upVal, downVal, leftVal, rightVal);
+                if (maskColors[maxVal]) {
+                  maskData[i] = maskColors[maxVal][0];
+                  maskData[i + 1] = maskColors[maxVal][1];
+                  maskData[i + 2] = maskColors[maxVal][2];
+                  maskData[i + 3] = 255;
+                } else {
+                  maskData[i] = 0;
+                  maskData[i + 1] = 0;
+                  maskData[i + 2] = 0;
+                  maskData[i + 3] = 0;
+                }
+              } else {
+                if (maskColors[val]) {
+                  maskData[i] = maskColors[val][0];
+                  maskData[i + 1] = maskColors[val][1];
+                  maskData[i + 2] = maskColors[val][2];
+                  maskData[i + 3] = maskColors[val][3];
+                } else {
+                  maskData[i] = 0;
+                  maskData[i + 1] = 0;
+                  maskData[i + 2] = 0;
+                  maskData[i + 3] = 0;
+                }
+              }
+              //if (maskData[i + 3] > 0) {
+              //} else {
+              //  maskData[i] = 0;
+              //  maskData[i + 1] = 0;
+              //  maskData[i + 2] = 0;
+              //  maskData[i + 3] = 0;
+              //}
+            }
+            maskCanvasCtx.putImageData(maskImageData, 0, 0);
+            /*ctx.drawImage(
+              tempCanvas, 
+              startX, startY, imageWidth, imageHeight, 
+              0, 0, imageWidth, imageHeight 
+            );*/
+          }
+          
+          const dataUrl = canvas.toDataURL('image/png');
+          console.log('dataUrl', dataUrl);
+          setCroppedImageUrl(dataUrl);
+          
+        };
+        xhr.send();
+
+      } else {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          if (!canvasRef.current) {
+            return;
+          }
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
+
+          var tempCanvas = document.createElement("canvas")
+          tempCanvas.width = img.width;
+          tempCanvas.height = img.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width, img.height);
+          
+          let randomPointCount = 0;
+          let foundPixel = false;
+          let startX;
+          let startY;
+
+          while (!foundPixel && randomPointCount < 1000) {
+            randomPointCount += 1;
+            startX = Math.floor(Math.random() * (img.width - imageWidth));
+            startY = Math.floor(Math.random() * (img.height - imageHeight));
+
+            let pImageData = tempCtx.getImageData(Math.floor(startX + imageWidth/2), Math.floor(startY + imageHeight/2), 5, 5);
+            let pData = pImageData.data;
+            console.log('pData', pData);
+
+            for (let i = 0; i < pData.length; i += 4) {
+              if (pData[i] < 220 && pData[i + 1] < 220 && pData[i + 2] < 220 && pData[i + 3] > 0) {
+                foundPixel = true;
+              }
+            }
+
+          }
+
+          console.log('randomPointCount', randomPointCount);
+          console.log('startX', startX, 'startY', startY);
+
+
+          setCropOffset({ x: startX, y: startY });
+
+          // Set canvas size and draw cropped image
+          canvas.width = imageWidth;
+          canvas.height = imageHeight;
+          ctx.drawImage(img, startX, startY, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
+
+          // Convert canvas to data URL and set state
+          const dataUrl = canvas.toDataURL('image/png');
+          console.log('dataUrl', dataUrl);
+          setCroppedImageUrl(dataUrl);
+        };
+        img.src = imageUrl;
+
+      };
+    }
+    processImage();
+  }, [activeProject, imageHeight, imageWidth]);
+
+  /*useEffect(() => {
+    setLabels([])
+    setCroppedImageUrl(null);
+    grabRandomCrop();
+  }, [activeProject, grabRandomCrop])*/
+
 
   const getCroppedImage = useCallback((x, y) => {
     const canvas = canvasRef.current;
@@ -150,9 +517,9 @@ function App() {
       const greenAvg = 255 - Math.floor((greenData[greenI] + greenData[greenI + 1] + greenData[greenI + 2]) / 3);
       const blueAvg = 255 - Math.floor((blueData[blueI] + blueData[blueI + 1] + blueData[blueI + 2]) / 3);
       //console.log('x', p % 100, 'y', Math.floor(p / 100), 'blueI', blueI, blueAvg);
-      pData[p * 4] = Math.floor(255 * Math.sqrt(Math.sqrt(redAvg / 255)));
-      pData[p * 4 + 1] = Math.floor(255 * Math.sqrt(Math.sqrt(greenAvg / 255)));
-      pData[p * 4 + 2] = Math.floor(255 * Math.sqrt(Math.sqrt(blueAvg / 255)));
+      pData[p * 4] = brighten ? Math.floor(255 * Math.sqrt(Math.sqrt(redAvg / 255))) : redAvg;
+      pData[p * 4 + 1] = brighten ? Math.floor(255 * Math.sqrt(Math.sqrt(greenAvg / 255))) : greenAvg;
+      pData[p * 4 + 2] = brighten ? Math.floor(255 * Math.sqrt(Math.sqrt(blueAvg / 255))): blueAvg;
 
       if (pX === imageSize/2 && pY === imageSize/2) {
         pData[p * 4] = 255;
@@ -212,7 +579,7 @@ function App() {
     
     const params = {
       Body: imgData,
-      EndpointName: 'lung-1c',
+      EndpointName: projects[activeProject].endpoint,
       ContentType: 'image/png',
       Accept: '*'
     };
@@ -225,25 +592,19 @@ function App() {
     });
 
     let result = await prom;
-    result = [Number(result[0]), Number(result[1]), Number(result[2])] 
+    result = result.map(Number);
 
-    let foundClass;
-    if (result[0] > result[1] && result[0] > result[2]) {
-      foundClass = 'A';
-    } else if (result[1] > result[0] && result[1] > result[2]) {
-      foundClass = 'D';
-    } else if (result[2] > result[0] && result[2] > result[1]) {
-      foundClass = 'S';
-    }
+    console.log('result', result);
+
+    const maxResult = Math.max(...result);
+    const maxIndex = result.indexOf(maxResult);
+    let foundClass = projects[activeProject].labels.find(label => label.classNum === String(maxIndex)).abbreviation;
 
     setLabels(prevLabels => [...prevLabels, { x, y, label: foundClass, color: labelColors[foundClass] }]);
     
     console.log('result', result);
     
-
-  }, [getCroppedImage, labelColors]);
-
-  const imagePadding = imageSize * Math.max(redMultiple, greenMultiple, blueMultiple) / 2;
+  }, [activeProject, getCroppedImage, labelColors]);
 
   const handleImageClick = (event) => {
     if (imageRef.current) {
@@ -290,7 +651,7 @@ function App() {
       }
       const params = {
         Bucket: 'newbai-ai-resources',
-        Key: 'lung/training/' + dataRole + '/' + click.class + '/' + Date.now() + '-' + Math.floor(Math.random() * 100000000) + '.png',
+        Key: `${activeProject}/training/` + dataRole + '/' + click.class + '/' + Date.now() + '-' + Math.floor(Math.random() * 100000000) + '.png',
         Body: bytes.buffer,
         ContentEncoding: 'base64',
         ContentType: 'image/png'
@@ -307,16 +668,10 @@ function App() {
       }, i * 250)
     });
 
-    const classToNumber = {
-      'A': 0,
-      'D': 1,
-      'S': 2
-    }
-
     setTimeout(async () => {
       const params = {
           Bucket: 'newbai-ai-resources',
-          Prefix: 'lung/training/train/'
+          Prefix: `${activeProject}/training/train/`
       };
       
       let manifestData = [];
@@ -348,9 +703,6 @@ function App() {
           }
       }
 
-      // Write the manifest data to a local file
-      //fs.writeFileSync(outputFile, manifestData.map(entry => JSON.stringify(entry)).join('\n'));
-      //console.log(`Manifest file ${outputFile} created with ${manifestData.length} entries.`);
       console.log('manifestData', manifestData);
 
       let manifestString = '';
@@ -363,7 +715,7 @@ function App() {
         if (imgName.includes('-')) {
           let dateStr = imgName.split('-')[0];
           if (Number(dateStr) > 1729187213055) {
-            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace("s3://newbai-ai-resources/lung/training/","")}\n`;
+            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/training/`,"")}\n`;
             lstCount += 1;
           }
         }
@@ -371,7 +723,7 @@ function App() {
       console.log('lstCount', lstCount);
       const manifestParams = {
         Bucket: 'newbai-ai-resources',
-        Key: 'lung/training/training_manifest.json',
+        Key: `${activeProject}/training/training_manifest.json`,
         Body: manifestString,
         ContentType: 'application/json'
       };
@@ -386,7 +738,7 @@ function App() {
 
       const lstParams = {
         Bucket: 'newbai-ai-resources',
-        Key: 'lung/training/train_lst/train_lst.lst',
+        Key: `${activeProject}/training/train_lst/train_lst.lst`,
         Body: lstString,
         ContentType: 'text/html'
       };
@@ -406,7 +758,7 @@ function App() {
     setTimeout(async () => {
       const params = {
           Bucket: 'newbai-ai-resources',
-          Prefix: 'lung/training/validation/'
+          Prefix: `${activeProject}/training/validation/`
       };
       
       let manifestData = [];
@@ -438,9 +790,6 @@ function App() {
           }
       }
 
-      // Write the manifest data to a local file
-      //fs.writeFileSync(outputFile, manifestData.map(entry => JSON.stringify(entry)).join('\n'));
-      //console.log(`Manifest file ${outputFile} created with ${manifestData.length} entries.`);
       console.log('manifestData', manifestData);
 
       let manifestString = '';
@@ -452,13 +801,13 @@ function App() {
         if (imgName.includes('-')) {
           let dateStr = imgName.split('-')[0];
           if (Number(dateStr) > 1729187213055) {
-            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace("s3://newbai-ai-resources/lung/training/","")}\n`;
+            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/training/`,"")}\n`;
           }
         }
       });
       const manifestParams = {
         Bucket: 'newbai-ai-resources',
-        Key: 'lung/training/validation_manifest.json',
+        Key: `${activeProject}/training/validation_manifest.json`,
         Body: manifestString,
         ContentType: 'application/json'
       };
@@ -473,7 +822,7 @@ function App() {
 
       const lstParams = {
         Bucket: 'newbai-ai-resources',
-        Key: 'lung/training/validation_lst/validation_lst.lst',
+        Key: `${activeProject}/training/validation_lst/validation_lst.lst`,
         Body: lstString,
         ContentType: 'text/html'
       };
@@ -498,6 +847,7 @@ function App() {
       flexDirection: 'row'
     }}>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <canvas ref={maskCanvasRef} style={{ pointerEvents: 'none', display: projects[activeProject].masks && croppedImageUrl && maskOn ? 'block' : 'none', opacity: '1', position: 'absolute', top: '0px', left: '0px', zIndex: 2 }} />
       <div style={{
         pointerEvents: 'none',
         position: 'absolute',
@@ -508,7 +858,7 @@ function App() {
         top: imageHeight - imagePadding / 2,
         left: 0,
         width: imageWidth,
-        zIndex: 3
+        zIndex: 5
       }}>Click on the image to add a <span style={{
         color: labelColors[activeClass],
         backgroundColor: '#fff'
@@ -517,6 +867,7 @@ function App() {
         pointerEvents: 'none',
         border: '1px dashed #000',
         position: 'absolute',
+        zIndex: 4,
         top: imagePadding,
         left: imagePadding,
         width: imageWidth - imagePadding * 2 - 2,
@@ -525,6 +876,7 @@ function App() {
       <div style={{
         backgroundColor: 'rgba(0,0,0,0.7)',
         position: 'absolute',
+        zIndex: 4,
         top: 0,
         left: 0,
         width: imagePadding,
@@ -533,6 +885,7 @@ function App() {
       <div style={{
         backgroundColor: 'rgba(0,0,0,0.7)',
         position: 'absolute',
+        zIndex: 4,
         top: 0,
         left: imageWidth - imagePadding,
         width: imagePadding,
@@ -541,6 +894,7 @@ function App() {
       <div style={{
         backgroundColor: 'rgba(0,0,0,0.7)',
         position: 'absolute',
+        zIndex: 4,
         top: 0,
         left: imagePadding,
         width: imageWidth - imagePadding * 2,
@@ -549,6 +903,7 @@ function App() {
       <div style={{
         backgroundColor: 'rgba(0,0,0,0.7)',
         position: 'absolute',
+        zIndex: 4,
         top: imageHeight - imagePadding,
         left: imagePadding,
         width: imageWidth - imagePadding * 2,
@@ -559,28 +914,30 @@ function App() {
             position: 'absolute',
             top: label.y - 5,
             left: label.x - 5,
-            color: label.color,
+            color: '#000',
             fontSize: '8px',
             fontWeight: 'bold',
             pointerEvents: 'none', 
-            backgroundColor: '#fff', 
+            backgroundColor: label.color, 
             borderRadius: '50%', 
             width: '10px', 
             height: '10px',
             textAlign: 'center',
-            borderColor: label.color,
+            borderColor: '#000',
             borderWidth: '1px',
-            borderStyle: 'solid'
+            borderStyle: 'solid',
+            zIndex: 6
         }}>{label.label}</div>
       ))}
       {croppedImageUrl && (
-        <img 
+        <div
+          onClick={handleImageClick}
+        ><img 
           ref={imageRef}
           src={croppedImageUrl} 
           alt="Cropped random section" 
-          onClick={handleImageClick}
-          style={{ cursor: 'crosshair' }}
-        />
+          style={{ cursor: 'crosshair', pointerEvents: 'none' }}
+        /></div>
       )}
       {!croppedImageUrl && (
         <div style={{
@@ -602,17 +959,27 @@ function App() {
           }}>
           <select onChange={(e) => {
             console.log('onChange', e.target.value);
+            setLabels([])
+            setClickData(() => []);
+            setActiveProject(e.target.value);
+          }}>
+            {Object.values(projects).map(project => (
+              <option value={project.name}>{project.name}</option>  
+            ))}
+          </select>
+          <select onChange={(e) => {
+            console.log('onChange', e.target.value);
             setActiveClass(e.target.value);
           }}>
-            <option value="S">Septa</option>
-            <option value="A">Alvioli</option>
-            <option value="D">Duct</option>
+            {projects[activeProject].labels.map(label => (
+              <option value={label.abbreviation}>{label.name}</option>
+            ))}
             <option value="auto">Auto</option>
           </select>
           <button onClick={() => {
             setLabels([])
             setCroppedImageUrl(null);
-            setImageUrl(images[Math.floor(Math.random() * images.length)]);
+            grabRandomCrop();
           }}>New Image</button>
           <button onClick={() => {
             setLabels([])
@@ -625,12 +992,14 @@ function App() {
           <button onClick={() => {
             downloadClickData();
           }}>Download Clicks</button>
+          {projects[activeProject].masks && <button onClick={() => {
+            setMaskOn(!maskOn);
+          }}>{maskOn ? 'Disable Mask' : 'Enable Mask'}</button>}
         </div>
         <textarea style={{ width: '100%', height: '100%' }} value={JSON.stringify(clickData, null, 2)} />
       </div>
       <canvas ref={smallCanvasRef} width={"100px"} height={"100px"} style={{ marginTop: '10px', marginLeft: '20px', width: '100px', height: '100px' }} />
-    </div>
-  );
+    </div>);
 }
 
 export default App;
