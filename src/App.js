@@ -1,14 +1,17 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-//import Tiff from 'tiff.js';
+import CircularProgress from '@mui/material/CircularProgress';
+import Button from '@mui/material/Button';
+import Select, { SelectChangeEvent } from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 
 import './App.css';
 import AWS from 'aws-sdk';
 import SageMakerRuntime from 'aws-sdk/clients/sagemakerruntime';
 
 const env = {
-  "ACCESS_KEY": "*",
-  "SECRET_KEY": "*",
-  "REGION": "*"
+  "ACCESS_KEY": "***",
+  "SECRET_KEY": "***",
+  "REGION": "us-east-2"
 };
 // Load environment variables
 const ACCESS_KEY = env.ACCESS_KEY;
@@ -44,6 +47,7 @@ const sagemakerruntime = new SageMakerRuntime({
 const projects = {
   'prostate': {
     name: 'prostate',
+    displayName: 'Prostate Cancer',
     endpoint: 'prostate-0b',
     images: [
       //'/images/000920ad0b612851f8e01bcc880d9b3d.tiff',
@@ -104,12 +108,13 @@ const projects = {
         name: 'Gleason 5',
         abbreviation: '5',
         classNum: '3',
-        color: '#f00'
+        color: '#f77'
       },
     ]
   },
   'lung': {
     name: 'lung',
+    displayName: 'Lung Classification',
     endpoint: 'lung-1c',
     images: [
       '/images/ISH_062118_AGER_R6052_1Days_D109-LUL-5A1_5.4_s1.png',
@@ -147,25 +152,48 @@ const projects = {
         name: 'Alveoli',
         abbreviation: 'A',
         classNum: '0',
-        color: '#0a0'
+        color: '#0f0'
       },
       {
         name: 'Duct',
         abbreviation: 'D',
         classNum: '1',
-        color: '#00a'
+        color: '#bbf'
       },
       {
         name: 'Septa',
         abbreviation: 'S',
         classNum: '2',
-        color: '#a00'
+        color: '#fbb'
       }
     ]
   }
 }
 
 function App() {
+  
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const windowWidth = dimensions.width;
+  const windowHeight = dimensions.height;
+
   const [activeProject, setActiveProject] = useState('prostate');
   const [croppedImageUrl, setCroppedImageUrl] = useState(null);
   const [clickData, setClickData] = useState([]);
@@ -175,6 +203,9 @@ function App() {
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
   const maskCanvasRef = useRef(null);
+  const redCanvasRef = useRef(null);
+  const greenCanvasRef = useRef(null);
+  const blueCanvasRef = useRef(null);
   const smallCanvasRef = useRef(null);
   const imageRef = useRef(null);
 
@@ -201,6 +232,19 @@ function App() {
     });
     return result;
   }, [activeProject]);
+
+  const activeLabels = useMemo(() => {
+    return projects[activeProject].labels;
+  }, [activeProject]);
+
+  const textClickData = useMemo(() => {
+    return clickData.map(click => ({
+        class: labelNames[click.class],
+        x: click.x,
+        y: click.y
+      })
+    )
+  }, [clickData]);
 
   const imageWidth = useMemo(() => {
     return projects[activeProject].imageWidth;
@@ -229,6 +273,12 @@ function App() {
   const brighten = useMemo(() => {
     return projects[activeProject].brighten;
   }, [activeProject]);
+
+  const maxWidth = Math.min(imageWidth, windowWidth - 500);
+  const maxHeight = Math.min(imageHeight, windowHeight); 
+
+  const leftOffset = (maxWidth - imageWidth) / 2;
+  const topOffset = (maxHeight - imageHeight) / 2;
 
   useEffect(() => {
     setActiveClass(projects[activeProject].labels[0].abbreviation);
@@ -474,6 +524,22 @@ function App() {
   const getCroppedImage = useCallback((x, y) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+
+    const redCanvas = redCanvasRef.current;
+    const redCtx = redCanvas.getContext('2d');
+    redCanvas.width = imageSize;
+    redCanvas.height = imageSize;
+
+    const greenCanvas = greenCanvasRef.current;
+    const greenCtx = greenCanvas.getContext('2d');
+    greenCanvas.width = imageSize;
+    greenCanvas.height = imageSize;
+
+    const blueCanvas = blueCanvasRef.current;
+    const blueCtx = blueCanvas.getContext('2d');
+    blueCanvas.width = imageSize;
+    blueCanvas.height = imageSize;
+
     const smallCanvas = smallCanvasRef.current;
     const smallCtx = smallCanvas.getContext('2d');
     smallCanvas.width = imageSize;
@@ -483,8 +549,56 @@ function App() {
     //smallCtx.drawImage(canvas, x - 50, y - 50, 100, 100, 0, 0, 100, 100);
 
 
+    // Create temporary canvases for scaling
+    const tempRedCanvas = document.createElement('canvas');
+    const tempRedCtx = tempRedCanvas.getContext('2d');
+    tempRedCanvas.width = imageSize * redMultiple;
+    tempRedCanvas.height = imageSize * redMultiple;
+
+    const tempGreenCanvas = document.createElement('canvas');
+    const tempGreenCtx = tempGreenCanvas.getContext('2d');
+    tempGreenCanvas.width = imageSize * greenMultiple;
+    tempGreenCanvas.height = imageSize * greenMultiple;
+
+    const tempBlueCanvas = document.createElement('canvas');
+    const tempBlueCtx = tempBlueCanvas.getContext('2d');
+    tempBlueCanvas.width = imageSize * blueMultiple;
+    tempBlueCanvas.height = imageSize * blueMultiple;
+
+    // Get the image data at different scales
+    const redRawImageData = ctx.getImageData(
+      x - (imageSize * redMultiple) / 2,
+      y - (imageSize * redMultiple) / 2,
+      imageSize * redMultiple,
+      imageSize * redMultiple
+    );
+    tempRedCtx.putImageData(redRawImageData, 0, 0);
+
+    const greenRawImageData = ctx.getImageData(
+      x - (imageSize * greenMultiple) / 2,
+      y - (imageSize * greenMultiple) / 2,
+      imageSize * greenMultiple,
+      imageSize * greenMultiple
+    );
+    tempGreenCtx.putImageData(greenRawImageData, 0, 0);
+
+    const blueRawImageData = ctx.getImageData(
+      x - (imageSize * blueMultiple) / 2,
+      y - (imageSize * blueMultiple) / 2,
+      imageSize * blueMultiple,
+      imageSize * blueMultiple
+    );
+    tempBlueCtx.putImageData(blueRawImageData, 0, 0);
+
+    // Now scale the images using drawImage
+    redCtx.drawImage(tempRedCanvas, 0, 0, imageSize * redMultiple, imageSize * redMultiple, 0, 0, imageSize, imageSize);
+    greenCtx.drawImage(tempGreenCanvas, 0, 0, imageSize * greenMultiple, imageSize * greenMultiple, 0, 0, imageSize, imageSize);
+    blueCtx.drawImage(tempBlueCanvas, 0, 0, imageSize * blueMultiple, imageSize * blueMultiple, 0, 0, imageSize, imageSize);
+
+
     const pImageData = ctx.getImageData(x - imageSize/2, y - imageSize/2, imageSize, imageSize);
     const pData = pImageData.data;
+
 
     const redImageData = ctx.getImageData(x - (imageSize * redMultiple) / 2, y - (imageSize * redMultiple) / 2, (imageSize * redMultiple), (imageSize * redMultiple));
     const redData = redImageData.data;
@@ -540,7 +654,7 @@ function App() {
   const createCroppedImage = useCallback((x, y) => {
     const dataUrl = getCroppedImage(x, y);
 
-    setClickData(prevData => [...prevData, { image: dataUrl, class: activeClass }]);
+    setClickData(prevData => [...prevData, { image: dataUrl, class: activeClass, x: Math.round(x), y: Math.round(y) }]);
     setLabels(prevLabels => [...prevLabels, { x, y, label: activeClass, color: labelColors[activeClass] }]);
     
 
@@ -608,6 +722,8 @@ function App() {
 
   const handleImageClick = (event) => {
     if (imageRef.current) {
+      event.clientX -= leftOffset;
+      event.clientY -= topOffset;
       if (event.clientX < imagePadding || event.clientX > (imageWidth - imagePadding) || event.clientY < imagePadding || event.clientY > (imageHeight - imagePadding)) {
         return;
       }
@@ -841,28 +957,55 @@ function App() {
 
   };
 
+
   return (
     <div className="App" style={{
-      display: 'flex',
-      flexDirection: 'row'
+      width: '100%',
+      height: `${windowHeight}px`,
+      overflow: 'hidden'
     }}>
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <canvas ref={maskCanvasRef} style={{ pointerEvents: 'none', display: projects[activeProject].masks && croppedImageUrl && maskOn ? 'block' : 'none', opacity: '1', position: 'absolute', top: '0px', left: '0px', zIndex: 2 }} />
-      <div style={{
+      {activeClass === 'auto' && (<div style={{
         pointerEvents: 'none',
         position: 'absolute',
         fontSize: '16px',
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#000',
         textAlign: 'center',
-        top: imageHeight - imagePadding / 2,
-        left: 0,
-        width: imageWidth,
-        zIndex: 5
-      }}>Click on the image to add a <span style={{
-        color: labelColors[activeClass],
-        backgroundColor: '#fff'
-      }}>{labelNames[activeClass]}</span> label</div>
+        bottom: 20,
+        left: maxWidth / 2 - 200,
+        width: 400,
+        zIndex: 5,
+        backgroundColor: labelColors[activeClass] || '#eee',
+        padding: 12,
+        borderRadius: '8px'
+      }}>Click on the image to run inference</div>)}
+      {activeClass !== 'auto' && (<div style={{
+        pointerEvents: 'none',
+        position: 'absolute',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        color: '#000',
+        textAlign: 'center',
+        bottom: 20,
+        left: maxWidth / 2 - 200,
+        width: 400,
+        zIndex: 5,
+        backgroundColor: labelColors[activeClass] || '#fff',
+        padding: 12,
+        borderRadius: '8px'
+      }}>Click on the image to add a <span>{labelNames[activeClass]}</span> label</div>)}
+      
+      <div style={{
+        overflow: 'hidden',
+        width: `${maxWidth - leftOffset}px`,
+        height: `${maxHeight - topOffset}px`,
+        position: 'relative',
+        top: `${topOffset}px`, 
+        left: `${leftOffset}px`
+      }}>
+        <canvas ref={canvasRef} style={{ display: 'none', position: 'absolute', top: `0px`, left: `0px`, zIndex: 1 }} />
+        <canvas ref={maskCanvasRef} style={{ pointerEvents: 'none', display: projects[activeProject].masks && croppedImageUrl && maskOn ? 'block' : 'none', opacity: '1', position: 'absolute', top: `0px`, left: `0px`, zIndex: 2 }} />
+      
       <div style={{
         pointerEvents: 'none',
         border: '1px dashed #000',
@@ -912,16 +1055,16 @@ function App() {
       {labels.map((label, index) => (
         <div key={index} style={{
             position: 'absolute',
-            top: label.y - 5,
-            left: label.x - 5,
+            top: label.y - 7,
+            left: label.x - 7,
             color: '#000',
-            fontSize: '8px',
+            fontSize: '10px',
             fontWeight: 'bold',
             pointerEvents: 'none', 
             backgroundColor: label.color, 
             borderRadius: '50%', 
-            width: '10px', 
-            height: '10px',
+            width: '14px', 
+            height: '14px',
             textAlign: 'center',
             borderColor: '#000',
             borderWidth: '1px',
@@ -946,59 +1089,189 @@ function App() {
           height: `${imageHeight / 2}px`,
           textAlign: 'center',
           paddingTop: `${imageHeight / 2}px`
-        }}>loading</div>
+        }}><CircularProgress/></div>
       )}
+      </div>
       <div style={{
+          width: '500px',
+          position: 'absolute',
+          right: '0px',
+          top: '0px',
+          overflow: 'hidden'
+        }}>
+        <div style={{
           display: 'flex',
-          flexDirection: 'column',
-          width: `calc(100% - ${imageWidth + 150}px)`
+          flexDirection: 'column'
         }}>
         <div style={{
             display: 'flex',
-            flexDirection: 'row'
+            flexDirection: 'row',
+            width: '500px',
+            padding: '8px'
           }}>
-          <select onChange={(e) => {
+          <div style={{
+            fontSize: '14px',
+            flexDirection: 'row',
+            width: '244px'
+          }}>
+            Project:
+          <Select 
+            value={activeProject}
+            style={{
+              width: '170px',
+              height: '24px',
+              fontSize: '14px',
+              marginLeft: '12px'
+            }}
+            onChange={(e) => {
             console.log('onChange', e.target.value);
             setLabels([])
             setClickData(() => []);
             setActiveProject(e.target.value);
           }}>
             {Object.values(projects).map(project => (
-              <option value={project.name}>{project.name}</option>  
+              <MenuItem value={project.name}>{project.displayName}</MenuItem>  
             ))}
-          </select>
-          <select onChange={(e) => {
+          </Select>
+          </div>
+          <div style={{
+            fontSize: '14px',
+            flexDirection: 'row',
+            width: '244px'
+          }}>
+            Label:
+          <Select 
+            value={activeClass}
+            style={{
+              width: '170px',
+              height: '24px',
+              fontSize: '14px',
+              marginLeft: '12px'
+            }}
+            onChange={(e) => {
             console.log('onChange', e.target.value);
             setActiveClass(e.target.value);
           }}>
             {projects[activeProject].labels.map(label => (
-              <option value={label.abbreviation}>{label.name}</option>
+              <MenuItem value={label.abbreviation}>{label.name}</MenuItem>
             ))}
-            <option value="auto">Auto</option>
-          </select>
-          <button onClick={() => {
+            <MenuItem value="auto">Auto</MenuItem>
+          </Select>
+          </div>
+          </div>
+          <div style={{
+            marginBottom: '8px'
+          }}>
+          <Button 
+            style={{
+              fontSize: '12px',
+              padding: '4px 10px',
+              margin: '4px',
+              textTransform: 'none'
+            }}
+            variant="contained" onClick={() => {
             setLabels([])
             setCroppedImageUrl(null);
             grabRandomCrop();
-          }}>New Image</button>
-          <button onClick={() => {
+          }}>New Image</Button>
+          <Button
+            style={{
+              fontSize: '12px',
+              padding: '4px 10px',
+              margin: '4px',
+              textTransform: 'none'
+            }}
+             variant="contained" onClick={() => {
             setLabels([])
             setClickData(() => []);
-          }}>Clear Data</button>
-          <button onClick={() => {
+          }}>Clear Labels</Button>
+          <Button
+            style={{
+              fontSize: '12px',
+              padding: '4px 10px',
+              margin: '4px',
+              textTransform: 'none'
+            }}
+             variant="contained" onClick={() => {
             setClickData(prevData => prevData.slice(0, -1));
             setLabels(prevData => prevData.slice(0, -1));
-          }}>Undo</button>
-          <button onClick={() => {
+          }}>Undo</Button>
+          <Button
+            style={{
+              fontSize: '12px',
+              padding: '4px 10px',
+              margin: '4px',
+              textTransform: 'none'
+            }}
+             variant="contained" onClick={() => {
             downloadClickData();
-          }}>Download Clicks</button>
-          {projects[activeProject].masks && <button onClick={() => {
+          }}>Save Labels</Button>
+          {projects[activeProject].masks && <Button
+            style={{
+              fontSize: '12px',
+              padding: '4px 10px',
+              margin: '4px',
+              textTransform: 'none'
+            }}
+             variant="contained" onClick={() => {
             setMaskOn(!maskOn);
-          }}>{maskOn ? 'Disable Mask' : 'Enable Mask'}</button>}
+          }}>{maskOn ? 'Disable Mask' : 'Enable Mask'}</Button>}
+
+          <div style={{
+            zIndex: 10,
+            display: 'flex',
+            flexDirection: 'row',
+            width: 'auto',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            position: 'absolute'
+          }}>
+            {activeLabels.map((label, index) => (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'row',
+                padding: '4px 14px'
+              }}>
+                <div key={index} style={{
+                top: label.y - 7,
+                left: label.x - 7,
+                color: '#000',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                pointerEvents: 'none', 
+                backgroundColor: label.color, 
+                borderRadius: '50%', 
+                width: '14px', 
+                height: '14px',
+                textAlign: 'center',
+                borderColor: '#000',
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                marginRight: '4px',
+                whiteSpace: 'nowrap'
+            }}>{label.abbreviation}</div>
+            <div style={{
+              whiteSpace: 'nowrap'
+            }}>{label.name}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <textarea style={{ width: '100%', height: '100%' }} value={JSON.stringify(clickData, null, 2)} />
+        </div>
+        <textarea style={{ marginTop: '18px', width: '500px', height: `${windowHeight - 236}px` }} value={JSON.stringify(textClickData, null, 2)} />
       </div>
-      <canvas ref={smallCanvasRef} width={"100px"} height={"100px"} style={{ marginTop: '10px', marginLeft: '20px', width: '100px', height: '100px' }} />
+      <div style={{ border: '3px solid red', position: 'absolute', bottom: '10px', right: '376px', width: '104px', height: '104px' }}>
+        <canvas ref={redCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
+      </div>
+      <div style={{ border: '3px solid green', position: 'absolute', bottom: '10px', right: '256px', width: '104px', height: '104px' }}>
+        <canvas ref={greenCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
+      </div>
+      <div style={{ border: '3px solid blue', position: 'absolute', bottom: '10px', right: '136px', width: '104px', height: '104px' }}>
+        <canvas ref={blueCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
+      </div>
+      <div style={{ border: '3px solid black', position: 'absolute', bottom: '10px', right: '16px', width: '104px', height: '104px' }}>
+        <canvas ref={smallCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
+      </div>
     </div>);
 }
 
