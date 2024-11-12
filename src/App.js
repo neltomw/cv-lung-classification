@@ -9,8 +9,8 @@ import AWS from 'aws-sdk';
 import SageMakerRuntime from 'aws-sdk/clients/sagemakerruntime';
 
 const env = {
-  "ACCESS_KEY": "***",
-  "SECRET_KEY": "***",
+  "ACCESS_KEY": "*",
+  "SECRET_KEY": "*",
   "REGION": "us-east-2"
 };
 // Load environment variables
@@ -146,7 +146,7 @@ const projects = {
     redMultiple: 24,
     greenMultiple: 8,
     blueMultiple: 1,
-    brighten: true,
+    brighten: false,
     labels: [
       {
         name: 'Alveoli',
@@ -207,6 +207,7 @@ function App() {
   const greenCanvasRef = useRef(null);
   const blueCanvasRef = useRef(null);
   const smallCanvasRef = useRef(null);
+  const colorCanvasRef = useRef(null);
   const imageRef = useRef(null);
 
   const labelColors = useMemo(() => {
@@ -546,6 +547,15 @@ function App() {
     smallCanvas.height = imageSize;
 
     smallCtx.clearRect(0, 0, smallCanvas.width, smallCanvas.height);
+
+
+    const colorCanvas = colorCanvasRef.current;
+    const colorCtx = colorCanvas.getContext('2d');
+    colorCanvas.width = imageSize;
+    colorCanvas.height = imageSize;
+
+    colorCtx.clearRect(0, 0, colorCanvas.width, colorCanvas.height);
+
     //smallCtx.drawImage(canvas, x - 50, y - 50, 100, 100, 0, 0, 100, 100);
 
 
@@ -599,6 +609,9 @@ function App() {
     const pImageData = ctx.getImageData(x - imageSize/2, y - imageSize/2, imageSize, imageSize);
     const pData = pImageData.data;
 
+    const colorImageData = ctx.getImageData(x - imageSize/2, y - imageSize/2, imageSize, imageSize);
+    const colorData = colorImageData.data;
+
 
     const redImageData = ctx.getImageData(x - (imageSize * redMultiple) / 2, y - (imageSize * redMultiple) / 2, (imageSize * redMultiple), (imageSize * redMultiple));
     const redData = redImageData.data;
@@ -640,21 +653,37 @@ function App() {
         pData[p * 4 + 1] = 255;
         pData[p * 4 + 2] = 255;
       }
+  
+      colorData[p * 4] = Math.min(redData[redI], greenData[greenI], blueData[blueI]);
+      colorData[p * 4 + 1] = Math.min(redData[redI + 1], greenData[greenI + 1], blueData[blueI + 1]);
+      colorData[p * 4 + 2] = Math.min(redData[redI + 2], greenData[greenI + 2], blueData[blueI + 2]);
     }
 
     // Put greyscale image data on greyscale canvas
-    smallCtx.putImageData(pImageData, 0, 0);
+    smallCtx.putImageData(colorImageData, 0, 0);
+
+    colorCtx.putImageData(pImageData, 0, 0);
 
     // Convert greyscale canvas to data URL and set state
     const dataUrl = smallCanvas.toDataURL('image/png');
-    return dataUrl;
+    const colorDataUrl = colorCanvas.toDataURL('image/png');
+    const redDataUrl = tempRedCanvas.toDataURL('image/png');
+    const greenDataUrl = tempGreenCanvas.toDataURL('image/png');
+    const blueDataUrl = tempBlueCanvas.toDataURL('image/png');
+    return {
+      color: colorDataUrl,
+      processed: dataUrl,
+      red: redDataUrl,
+      green: greenDataUrl,
+      blue: blueDataUrl
+    };
 
-  }, [blueMultiple]);
+  }, [blueMultiple, brighten, greenMultiple, imageSize, redMultiple]);
 
   const createCroppedImage = useCallback((x, y) => {
     const dataUrl = getCroppedImage(x, y);
 
-    setClickData(prevData => [...prevData, { image: dataUrl, class: activeClass, x: Math.round(x), y: Math.round(y) }]);
+    setClickData(prevData => [...prevData, { images: dataUrl, class: activeClass, x: Math.round(x), y: Math.round(y) }]);
     setLabels(prevLabels => [...prevLabels, { x, y, label: activeClass, color: labelColors[activeClass] }]);
     
 
@@ -662,7 +691,7 @@ function App() {
 
 
   const runInference = useCallback(async (x, y) => {
-    const dataUrl = getCroppedImage(x, y);
+    const dataUrl = getCroppedImage(x, y).processed;
 
     const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
 
@@ -750,210 +779,219 @@ function App() {
 
     //let click = clickData[0];
 
+    const imageKeys = ['processed', 'color', 'red', 'green', 'blue'];
+
     clickData.forEach((click, i) => {
-      const base64Data = click.image.replace(/^data:image\/png;base64,/, "");
 
-      // Convert base64 to ArrayBuffer
-      const binaryString = window.atob(base64Data);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-      }
+      imageKeys.forEach((imageType) => {
+        const base64Data = click.images[imageType].replace(/^data:image\/png;base64,/, "");
 
-      let dataRole = 'train';
-      if (Math.random() < 0.15) {
-        dataRole = 'validation';
-      }
-      const params = {
-        Bucket: 'newbai-ai-resources',
-        Key: `${activeProject}/training/` + dataRole + '/' + click.class + '/' + Date.now() + '-' + Math.floor(Math.random() * 100000000) + '.png',
-        Body: bytes.buffer,
-        ContentEncoding: 'base64',
-        ContentType: 'image/png'
-      };
+        // Convert base64 to ArrayBuffer
+        const binaryString = window.atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
 
-      setTimeout(() => {
-        s3.upload(params, (err, data) => {
+        let dataRole = 'train';
+        if (Math.random() < 0.15) {
+          dataRole = 'validation';
+        }
+        const params = {
+          Bucket: 'newbai-ai-resources',
+          Key: `${activeProject}/${imageType}/training/` + dataRole + '/' + click.class + '/' + Date.now() + '-' + Math.floor(Math.random() * 100000000) + '.png',
+          Body: bytes.buffer,
+          ContentEncoding: 'base64',
+          ContentType: 'image/png'
+        };
+
+        setTimeout(() => {
+          s3.upload(params, (err, data) => {
+            if (err) {
+              console.error("Error", err);
+            } else {
+              console.log(dataRole, "Upload Success", data.Location);
+            }
+          }); 
+        }, i * 250)
+      });
+    });
+
+    imageKeys.forEach((imageType) => {
+      setTimeout(async () => {
+        const params = {
+            Bucket: 'newbai-ai-resources',
+            Prefix: `${activeProject}/${imageType}/training/train/`
+        };
+        
+        let manifestData = [];
+        let isTruncated = true;
+        let continuationToken;
+
+        // List objects in the specified S3 prefix (handling paginated results)
+        while (isTruncated) {
+            if (continuationToken) {
+                params.ContinuationToken = continuationToken;
+            }
+
+            const response = await s3.listObjectsV2(params).promise();
+            isTruncated = response.IsTruncated;
+            continuationToken = response.NextContinuationToken;
+
+            for (let obj of response.Contents) {
+                const imageS3Uri = `s3://${'newbai-ai-resources'}/${obj.Key}`;
+                // Extract class label from the folder structure (e.g., 'class1' from 'train/class1/image1.jpg')
+                const label = obj.Key.split('/')[4]
+                console.log('label', label)
+
+                // Create a manifest entry
+                const manifestEntry = {
+                    "source-ref": imageS3Uri,
+                    "class": String(classToNumber[label])
+                };
+                manifestData.push(manifestEntry);
+            }
+        }
+
+        console.log('manifestData', manifestData);
+
+        let manifestString = '';
+        let lstString = '';
+        let lstCount = 0;
+        manifestData.forEach((entry, i) => {
+          manifestString += JSON.stringify(entry) + '\n';
+          let pathAr = entry["source-ref"].split('/');
+          let imgName = pathAr[pathAr.length - 1].replace('.png', '');
+          if (imgName.includes('-')) {
+            let dateStr = imgName.split('-')[0];
+            if (Number(dateStr) > 1729187213055) {
+              lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/${imageType}/training/`,"")}\n`;
+              lstCount += 1;
+            }
+          }
+        });
+        console.log('lstCount', lstCount);
+        const manifestParams = {
+          Bucket: 'newbai-ai-resources',
+          Key: `${activeProject}/${imageType}/training/training_manifest.json`,
+          Body: manifestString,
+          ContentType: 'application/json'
+        };
+
+        s3.upload(manifestParams, (err, data) => {
           if (err) {
             console.error("Error", err);
           } else {
-            console.log(dataRole, "Upload Success", data.Location);
+            console.log("Upload Success", data.Location);
           }
-        }); 
-      }, i * 250)
+        });
+
+        const lstParams = {
+          Bucket: 'newbai-ai-resources',
+          Key: `${activeProject}/${imageType}/training/train_lst/train_lst.lst`,
+          Body: lstString,
+          ContentType: 'text/html'
+        };
+
+        s3.upload(lstParams, (err, data) => {
+          if (err) {
+            console.error("Error", err);
+          } else {
+            console.log("Upload Success", data.Location);
+          }
+        });
+
+        console.log('lstString', lstString);
+        
+      }, clickData.length * 250 + 1000)
+
+      setTimeout(async () => {
+        const params = {
+            Bucket: 'newbai-ai-resources',
+            Prefix: `${activeProject}/${imageType}/training/validation/`
+        };
+        
+        let manifestData = [];
+        let isTruncated = true;
+        let continuationToken;
+
+        // List objects in the specified S3 prefix (handling paginated results)
+        while (isTruncated) {
+            if (continuationToken) {
+                params.ContinuationToken = continuationToken;
+            }
+
+            const response = await s3.listObjectsV2(params).promise();
+            isTruncated = response.IsTruncated;
+            continuationToken = response.NextContinuationToken;
+
+            for (let obj of response.Contents) {
+                const imageS3Uri = `s3://${'newbai-ai-resources'}/${obj.Key}`;
+                // Extract class label from the folder structure (e.g., 'class1' from 'train/class1/image1.jpg')
+                const label = obj.Key.split('/')[4]
+                console.log('label', label)
+
+                // Create a manifest entry
+                const manifestEntry = {
+                    "source-ref": imageS3Uri,
+                    "class": String(classToNumber[label])
+                };
+                manifestData.push(manifestEntry);
+            }
+        }
+
+        console.log('manifestData', manifestData);
+
+        let manifestString = '';
+        let lstString = '';
+        manifestData.forEach((entry, i) => {
+          manifestString += JSON.stringify(entry) + '\n';
+          let pathAr = entry["source-ref"].split('/');
+          let imgName = pathAr[pathAr.length - 1].replace('.png', '');
+          if (imgName.includes('-')) {
+            let dateStr = imgName.split('-')[0];
+            if (Number(dateStr) > 1729187213055) {
+              lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/${imageType}/training/`,"")}\n`;
+            }
+          }
+        });
+        const manifestParams = {
+          Bucket: 'newbai-ai-resources',
+          Key: `${activeProject}/${imageType}/training/validation_manifest.json`,
+          Body: manifestString,
+          ContentType: 'application/json'
+        };
+
+        s3.upload(manifestParams, (err, data) => {
+          if (err) {
+            console.error("Error", err);
+          } else {
+            console.log("Upload Success", data.Location);
+          }
+        });
+
+        const lstParams = {
+          Bucket: 'newbai-ai-resources',
+          Key: `${activeProject}/${imageType}/training/validation_lst/validation_lst.lst`,
+          Body: lstString,
+          ContentType: 'text/html'
+        };
+
+        s3.upload(lstParams, (err, data) => {
+          if (err) {
+            console.error("Error", err);
+          } else {
+            console.log("Upload Success", data.Location);
+          }
+        });
+
+      }, clickData.length * 250 + 1000)
+
     });
 
-    setTimeout(async () => {
-      const params = {
-          Bucket: 'newbai-ai-resources',
-          Prefix: `${activeProject}/training/train/`
-      };
-      
-      let manifestData = [];
-      let isTruncated = true;
-      let continuationToken;
-
-      // List objects in the specified S3 prefix (handling paginated results)
-      while (isTruncated) {
-          if (continuationToken) {
-              params.ContinuationToken = continuationToken;
-          }
-
-          const response = await s3.listObjectsV2(params).promise();
-          isTruncated = response.IsTruncated;
-          continuationToken = response.NextContinuationToken;
-
-          for (let obj of response.Contents) {
-              const imageS3Uri = `s3://${'newbai-ai-resources'}/${obj.Key}`;
-              // Extract class label from the folder structure (e.g., 'class1' from 'train/class1/image1.jpg')
-              const label = obj.Key.split('/')[3]
-              console.log('label', label)
-
-              // Create a manifest entry
-              const manifestEntry = {
-                  "source-ref": imageS3Uri,
-                  "class": String(classToNumber[label])
-              };
-              manifestData.push(manifestEntry);
-          }
-      }
-
-      console.log('manifestData', manifestData);
-
-      let manifestString = '';
-      let lstString = '';
-      let lstCount = 0;
-      manifestData.forEach((entry, i) => {
-        manifestString += JSON.stringify(entry) + '\n';
-        let pathAr = entry["source-ref"].split('/');
-        let imgName = pathAr[pathAr.length - 1].replace('.png', '');
-        if (imgName.includes('-')) {
-          let dateStr = imgName.split('-')[0];
-          if (Number(dateStr) > 1729187213055) {
-            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/training/`,"")}\n`;
-            lstCount += 1;
-          }
-        }
-      });
-      console.log('lstCount', lstCount);
-      const manifestParams = {
-        Bucket: 'newbai-ai-resources',
-        Key: `${activeProject}/training/training_manifest.json`,
-        Body: manifestString,
-        ContentType: 'application/json'
-      };
-
-      s3.upload(manifestParams, (err, data) => {
-        if (err) {
-          console.error("Error", err);
-        } else {
-          console.log("Upload Success", data.Location);
-        }
-      });
-
-      const lstParams = {
-        Bucket: 'newbai-ai-resources',
-        Key: `${activeProject}/training/train_lst/train_lst.lst`,
-        Body: lstString,
-        ContentType: 'text/html'
-      };
-
-      s3.upload(lstParams, (err, data) => {
-        if (err) {
-          console.error("Error", err);
-        } else {
-          console.log("Upload Success", data.Location);
-        }
-      });
-
-      console.log('lstString', lstString);
-      
-    }, clickData.length * 250 + 1000)
-
-    setTimeout(async () => {
-      const params = {
-          Bucket: 'newbai-ai-resources',
-          Prefix: `${activeProject}/training/validation/`
-      };
-      
-      let manifestData = [];
-      let isTruncated = true;
-      let continuationToken;
-
-      // List objects in the specified S3 prefix (handling paginated results)
-      while (isTruncated) {
-          if (continuationToken) {
-              params.ContinuationToken = continuationToken;
-          }
-
-          const response = await s3.listObjectsV2(params).promise();
-          isTruncated = response.IsTruncated;
-          continuationToken = response.NextContinuationToken;
-
-          for (let obj of response.Contents) {
-              const imageS3Uri = `s3://${'newbai-ai-resources'}/${obj.Key}`;
-              // Extract class label from the folder structure (e.g., 'class1' from 'train/class1/image1.jpg')
-              const label = obj.Key.split('/')[3]
-              console.log('label', label)
-
-              // Create a manifest entry
-              const manifestEntry = {
-                  "source-ref": imageS3Uri,
-                  "class": String(classToNumber[label])
-              };
-              manifestData.push(manifestEntry);
-          }
-      }
-
-      console.log('manifestData', manifestData);
-
-      let manifestString = '';
-      let lstString = '';
-      manifestData.forEach((entry, i) => {
-        manifestString += JSON.stringify(entry) + '\n';
-        let pathAr = entry["source-ref"].split('/');
-        let imgName = pathAr[pathAr.length - 1].replace('.png', '');
-        if (imgName.includes('-')) {
-          let dateStr = imgName.split('-')[0];
-          if (Number(dateStr) > 1729187213055) {
-            lstString += `${i}\t${entry["class"]}\t${entry["source-ref"].replace(`s3://newbai-ai-resources/${activeProject}/training/`,"")}\n`;
-          }
-        }
-      });
-      const manifestParams = {
-        Bucket: 'newbai-ai-resources',
-        Key: `${activeProject}/training/validation_manifest.json`,
-        Body: manifestString,
-        ContentType: 'application/json'
-      };
-
-      s3.upload(manifestParams, (err, data) => {
-        if (err) {
-          console.error("Error", err);
-        } else {
-          console.log("Upload Success", data.Location);
-        }
-      });
-
-      const lstParams = {
-        Bucket: 'newbai-ai-resources',
-        Key: `${activeProject}/training/validation_lst/validation_lst.lst`,
-        Body: lstString,
-        ContentType: 'text/html'
-      };
-
-      s3.upload(lstParams, (err, data) => {
-        if (err) {
-          console.error("Error", err);
-        } else {
-          console.log("Upload Success", data.Location);
-        }
-      });
-
-    }, clickData.length * 250 + 1000)
-
     setClickData([]);
+    setLabels([]);
 
   };
 
@@ -1271,6 +1309,9 @@ function App() {
       </div>
       <div style={{ border: '3px solid black', position: 'absolute', bottom: '10px', right: '16px', width: '104px', height: '104px' }}>
         <canvas ref={smallCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
+      </div>
+      <div style={{ border: '3px solid black', position: 'absolute', bottom: '132px', right: '16px', width: '104px', height: '104px' }}>
+        <canvas ref={colorCanvasRef} width={"100px"} height={"100px"} style={{ border: '2px solid white', width: '100px', height: '100px' }} />
       </div>
     </div>);
 }
