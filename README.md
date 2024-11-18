@@ -6,10 +6,14 @@ The goal of this project was to create a pixel by pixel image classification too
 Having an inference tool has many benefits, including reducing subjectivity of classification that may occur between different individual’s labeling. Instead, the classification model is trained off of labeling information provided by a single individual with assumed expertise.
 The goal was to increase efficiency while maintaining a high level of accuracy.
 
-### Model/Hardware Specs:
-Pretrained ResNet-18 architecture with Adam optimizer. The model is also leveraging MXNet as the deep learning framework, utilizing CUDA and GPU acceleration (specifically a Tesla K80 GPU).
-
+## Model/Hardware Specs:
+Pretrained ResNet-18 architecture with Adam optimizer. 
+The model leverages MXNet as the deep learning framework, and uses CUDA and GPU acceleration (specifically a Tesla K80 GPU).
 ![Model Selection](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/ALGORITH_SELECTION.png)
+
+
+## Hyperparameter Configuration (SageMaker):
+![Hyperparameter Configuration](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/HYPERPARAMETERS.png)
 
 
 ## Methods
@@ -18,21 +22,27 @@ We used different color channels, associated with different zoom levels of an im
 The blue colored channels were associated with the standard 1x zoom level (50x50 pixel size). 
 Red channel was zoomed out by 24x.
 The green channel zoomed out by 8x. 
-![Color Channels]([(https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/OTHER_THUMBNAILS.png)
+
+![Color Channels](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/OTHER_THUMBNAILS.png)
 
 
-These images were overlayed on top of each other for training data of the classification model. 
-![Channel Overlay](https://<bucket-name>.s3.<region>.amazonaws.com](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/COLORED_THUMBNAIL.png)
+These images were overlayed on top of each other for training data of the classification model: 
 
-We wanted to compare the inference accuracy of the Color and Zoom Associated Channels method (CaZaCs) vs. standard labeling data (no color channels associated with different zoom levels). 
+![Channel Overlay](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/COLORED_THUMBNAIL.png)
+
+We wanted to compare the inference accuracy of the Color and Zoom Associated Channels method (CaZaCs) vs. standard labeling data (standard zoom level, and no color channels). 
 
 
-### Labeling Lung Components
+### Labeling Lung Components:
 ![Labeling Interface](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/LABELING_GIF.gif)
 
-### Hyperparameters for Training on SageMaker
-![Hyperparameter Configuration](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/HYPERPARAMETERS.png)
 
+### Live Inference Tool:
+![Single Pixel Inference](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/INFERENCE_CLICK_GIF.gif)
+
+
+### You can now do multiple pixel selection inference!
+![Multi Selection Inference](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/INFERENCE_DRAG_GIF.gif)
 
 ## Results
 We successfully developed an automated classification system that:
@@ -41,18 +51,16 @@ We successfully developed an automated classification system that:
 3. Supports multiple tissue types and classification categories
 4. Enables real-time inference using deployed models
 
-## Live Inference Tool
-![Single Pixel Inference](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/INFERENCE_CLICK_GIF.gif)
-
-You can now do multiple pixel selection inference!
-![Multi Selection Inference](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/INFERENCE_DRAG_GIF.gif)
 
 ## Validation Accuracy Results
 ### Results: Training Data Using Color and Zoom Associated Channel Method (CaZaC)
-![Results with CaZaC](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/TRAINING_GRAPH.png)
 
-### Results Without CaZaC
-![Results without CaZaC](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/BLUE_TRAINING.png)
+![Results with CaZaC](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/GRAPH_LABELED_PROCESSED.png)
+
+
+### Results: Without CaZaC
+
+![Results without CaZaC](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/GRAPH_LABELED_BASIC.png)
  
 
 ## Further Directions
@@ -60,7 +68,8 @@ You can now do multiple pixel selection inference!
 * Generate segmentation label data from pixel level classification
 
 ## UPDATES!
-We added prostate histological images ```https://www.lungmap.net/explore-data/visualize-data/?main_tab_id=two_d_imaging&image_tab_id=histology``` from the Prostate cANcer graDe Assessment (PANDA) Challenge ```https://www.kaggle.com/c/prostate-cancer-grade-assessment/data```. We wanted to see if CazaC could outperform standard classification methods for diagnosis of prostrate cancer using the Gleason grading system (results are pending).
+We added prostate histological images from the Prostate cANcer graDe Assessment (PANDA) Challenge: ```https://www.kaggle.com/c/prostate-cancer-grade-assessment/data```. 
+We wanted to see if CazaC could outperform standard classification methods for diagnosis of prostrate cancer using the Gleason grading system (results are pending).
 
 ![Gleason Labeling](https://newbai-ai-resources.s3.us-east-2.amazonaws.com/images/BASIC_LABELING_GIF.gif)
 
@@ -99,9 +108,11 @@ nvm use 18
 git clone https://github.com/neltomw/cv-lung-classification-tool.git
 cd cv-lung-classification-tool
 ```
-* Enter your AWS credentials in App.js
+* Enter your AWS credentials in App.js:
+```
 const env = {
  "ACCESS_KEY": "*",
  "SECRET_KEY": "*",
  "REGION": "*"
 };
+```
