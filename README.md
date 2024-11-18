@@ -1,16 +1,43 @@
 # cv-lung-classification
 
-Simple overview of use/purpose.
-
 ## Description
-The goal of this project was to create a pixel by pixel image classification model using AWS Sagemaker and state of the art deep learning models. This model would be able to infer whether any given coordinate in a histological sample of a rat lung is an alveoli, septa or duct. 
+The goal of this project was to create a pixel by pixel image classification tool using AWS Sagemaker, state of the art deep learning models and ReactJS framework. This model is able to infer whether any given coordinate in a histological sample of a rat lung is an alveoli, septa or duct. 
 
 Having an inference tool has many benefits, including reducing subjectivity of classification that may occur between different individual’s labelling. Instead, the classification model is trained off of labelling information provided by a single individual with assumed expertise.
+The goal was to increase efficiency while maintaining a high level of accuracy.
 
-Some other benefits include; efficiency with a high level of accuracy and precision.
+### Model/Hardware Specs:
+Pretrained ResNet-18 architecture with Adam optimizer. The model is also leveraging MXNet as the deep learning framework, utilizing CUDA and GPU acceleration (specifically a Tesla K80 GPU).
 
-### Model/hardware specs:
-Pretrained ResNet-18 architecture with Adam optimizer and a mini-batch size of 32. The model is also leveraging MXNet as the deep learning framework, utilizing CUDA and GPU acceleration (specifically a Tesla K80 GPU).
+## Methods
+We used different color channels, associated with different zoom levels of an image to train the classification model. 
+The blue colored channels were associated with the standard 1x zoom level (50x50 pixel size). 
+Red channel was zoomed out by 24x.
+The green channel zoomed out by 8x. 
+These images were overlayed on top of each other for training data of the classification model. 
+We wanted to compare the inference accuracy of the Color and Zoom Associated Channels method (CaZaCs) vs. standard labelling data (no color channels associated with different zoom levels). 
+
+### Labelling Lung Components
+General Interface
+
+
+### Hyperparameters for Training on SageMaker
+
+## Results
+We successfully developed an automated classification system that:
+1. Uses labeled pixel data to train classification models
+2. Provides an intuitive interface for collecting labeled data
+3. Supports multiple tissue types and classification categories
+4. Enables real-time inference using deployed models
+
+### Validation Accuracy Results
+### Results: Training Data Using Color and Zoom Associated Channel Method (CaZaC)
+
+## Results Without CaZaC 
+
+## Further Directions
+* Experiment with more tissue types/classifications
+* Generate segmentation label data from pixel level classification
 
 ## Getting Started
 
@@ -18,7 +45,7 @@ Pretrained ResNet-18 architecture with Adam optimizer and a mini-batch size of 3
 * Node v18
 * AWS account
 
-### Getting Started
+### Setup
 * Make sure NVM (Node Version Manager) is installed
 ```
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
